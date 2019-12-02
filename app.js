@@ -71,6 +71,11 @@ let spotify_credentials = {
     user: null
 };
 
+let spotify_request_status = {
+    pending: false,
+    url: null,
+};
+
 // set up various message patterns.
 const loubot_pattern = /initiate loubot/;
 const spendesk_pattern = /latest|update|status|happening|news/;
@@ -95,12 +100,13 @@ const owo_pattern = /owo/;
 const pubs_pattern = /where should we go/;
 const affection_pattern = /love you/;
 
-const whitelisted_channels = /GDYFAL0HJ|CD2FKB621|GB7LT0TKK|DP07UQJD8|DPFFK0287|DQ2SNH0L9|GQ9QLM4NN/;
+const whitelisted_channels = /GDYFAL0HJ|CD2FKB621|GB7LT0TKK|DP07UQJD8|DPFFK0287|DQ2SNH0L9|GQ9QLM4NN|GQRJ5NPDH/;
 const whitelisted_users = /U9C81JU91/;
 
 const spotify_pattern = /play|dj|what song is this|next song|previous song|spotify status|shuffle|change volume to|christmas party playlist/;
-const spotify_channels = /GB7LT0TKK|CD2FKB621|DP07UQJD8|GQ9QLM4NN/;
-const christmas_playlist_id = '0vXdwTD04TCEivqsMnj0oM';
+const spotify_channels = /GB7LT0TKK|CD2FKB621|DP07UQJD8|GQ9QLM4NN|GQRJ5NPDH/;
+// const christmas_playlist_id = '0vXdwTD04TCEivqsMnj0oM';
+const christmas_playlist_id = '1KfvD9bvlMA1xlH5zrF28B';
 
 // keep track (globally) of the number of quotes requested per day.
 let requested_quote_status = {
@@ -133,6 +139,11 @@ bot.on('message', (data) => {
             let message_text = data.text.toLowerCase();
 
             if (message_text.match(loubot_pattern)) initiate_loubot(data);
+
+            if (spotify_request_status.pending) {
+                handle_spotify_playlist_add(data, christmas_playlist_id, true);
+                return;
+            }
 
             if (message_text.match(spotify_pattern)) {
                 if (data.channel.match(spotify_channels)) {
@@ -208,7 +219,8 @@ const handle_initial_spotify_request = (data, message_text) => {
     } 
     else if (message_text.match(/play christmas party playlist/)) handle_spotify_dj(data, christmas_playlist_id);
     else if (message_text.match(/show christmas party playlist/)) show_spotify_playlist(data, christmas_playlist_id);
-    else if (message_text.match(/play/)) play_spotify_track(data);
+    else if (message_text.match(/add /) && message_text.match(/christmas party playlist/)) handle_spotify_playlist_add(data, christmas_playlist_id);
+    else if (message_text.match(/play /)) play_spotify_track(data);
     else if (message_text.match(/dj/)) handle_spotify_dj(data);
     else if (message_text.match(/what song is this/)) show_spotify_track_status(data);
     else if (message_text.match(/next song|previous song/)) handle_spotify_track_skip(data);
@@ -455,6 +467,54 @@ const show_spotify_playlist = async (data, playlist_id) => {
     log.info(`[spotify] [show_spotify_playlist] playlist: ${playlist_obj.name}...`);
 
     bot.postMessage(data.channel, `<@${data.user}> <${playlist_obj.url}|${playlist_obj.name}> :santa: :christmas_tree: :mother_christmas:`, params);
+};
+
+const handle_spotify_playlist_add = async (data, playlist_id, confirm) => {
+    if (!confirm) {
+        let request = data.text.toLowerCase().split('add ')[1].replace(' to the christmas ', ' to christmas ').split(' to christmas')[0].replace(' by ', ' ').trim();
+        let results = await handle_spotify_search(request, 'track');
+
+        bot.postMessage(data.channel, `<@${data.user}> found *<${results.url}|${results.name}>* by *${results.artist}*...`, params);
+        
+        setTimeout(() => {
+            bot.postMessage(data.channel, `<@${data.user}> is this correct?`, params);
+        }, 2000);
+
+        spotify_request_status.pending = true;
+        spotify_request_status.uri = results.uri;
+    } else {
+        if (data.text.toLowerCase().match(/ yes/)) {
+            try {
+                await axios.post(`https://api.spotify.com/v1/playlists/${playlist_id}/tracks`,
+                {
+                    "uris": [spotify_request_status.uri]
+                },
+                {
+                    headers: {
+                        "Authorization": `Bearer ${spotify_credentials.access_token}`
+                    }
+                });
+
+                bot.postMessage(data.channel, `<@${data.user}> song has been added! :santa: :christmas_tree: :mother_christmas:`, params);
+            } catch (error) {
+                console.log(error);
+                if (error.response) {
+                    bot.postMessage(data.channel, `:face_with_head_bandage:\n\`${error}\``, params);
+
+                    log.error(`[spotify] [toggle_spotify_shuffle] ${error.response.status} - ${error.response.statusText}`);
+                } else {
+                    log.error(`[spotify] [toggle_spotify_shuffle] ${error}`);
+                }
+            }
+    
+            // log.info(`[spotify] [handle_spotify_dj] playing ${type} '${play_obj.name}'...`);
+    
+            // bot.postMessage(data.channel, `:rael-confused: :speech_balloon: "now streaming ${type} *<${play_obj.url}|${play_obj.name}>*${type === 'album' ? ` by *${play_obj.artist}*` : ''}..." :speaker: :musical_note: :gangstas-paraldise:`, params);
+            // setTimeout(() => { show_spotify_track_status(data, true); }, 2000);
+        }
+        spotify_request_status.pending = false;
+        spotify_request_status.pending.uri = null;
+    }
 };
 
 const toggle_spotify_shuffle = async data => {
