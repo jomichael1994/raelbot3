@@ -159,8 +159,8 @@ bot.on('message', (data) => {
             }
 
             if (message_text.match(/spendesk/) && message_text.match(spendesk_pattern)) provide_spendesk_update(data);
-            else if (message_text.match(/quote/) && message_text.match(requested_quote_pattern)) handle_requested_quote(data);
-            else if (message_text.match(fact_pattern)) handle_random_fact(data);
+            else if (message_text.match(/quote/) && message_text.match(requested_quote_pattern)) handle_quote_request(data);
+            // else if (message_text.match(fact_pattern)) handle_random_fact(data);
             else if (message_text.match((help_pattern))) help(data);
             else if (message_text.match(tag_pattern)) conduct_tag_check(data);
             else if (message_text.match(pubs_pattern)) handle_random_pub(data);
@@ -731,6 +731,145 @@ const provide_spendesk_update = data => {
         });
     } catch (error) {
         log.error(`[provide_spendesk_update] ${error}`);
+    }
+};
+
+/**
+ * [usage: '@raelbot random quote please']
+ * posts a random quote. 
+ * by default there is a limit of 3 per day - but can be overwritten by including 'NOW' in the request.
+ * @param data - the message received from the user.
+ */
+const handle_quote_request = data => {
+    log.info(`[handle_quote_request] received request for a random quote...`);
+
+    try {
+        let quotes = JSON.parse(fs.readFileSync('./helpers/quotes.json', 'utf8'));
+        let random = Math.floor(Math.random() * quotes.length);
+        let message;
+        let date;
+    
+        if (requested_quote_status.count >= 3) {
+            if (data.text.match(/NOW/)) {
+                log.info(`[handle_quote_request] quote count is ${requested_quote_status.count}, forcing request...`);
+                message = `:rael-confused: :speech_balloon:  \`\"${quotes[random].quote}\"\``;
+            } else {
+                date = new Date();
+                if (date.getDate() < new Date(requested_quote_status.date).getDate()+1) {
+                    log.info(`[handle_quote_request] daily quote limit exceeded...`);
+                    bot.postMessage(data.channel, `<@${data.user}> there are only so many quotes! please try again tomorrow... :rael:`, params);
+                    return;
+                } else {
+                    requested_quote_status.date = null;
+                    requested_quote_status.count = 0;
+                }
+            }
+        }
+        
+        if (quotes[random].consumed == false) {
+            if (quotes[random].verified == false) {
+                message = `:rael-confused: :speech_balloon:  \`\"${quotes[random].quote}\"\`\n_(submitted by <@${quotes[random].poster}>)_`;
+            } else {
+                if (quotes[random].context && quotes[random].context == true) {
+                    message = `[_${quotes[random].context}_]\n:rael-confused: :speech_balloon:  \`\"${quotes[random].quote}\"\``;
+                } else {
+                    message = `:rael-confused: :speech_balloon:  \`\"${quotes[random].quote}\"\``;
+                }
+            }
+
+            log.info(`[handle_quote_request] responding with message '${message}'...`);
+            bot.postMessage(data.channel, message, params);
+
+            requested_quote_status.count++;
+            requested_quote_status.date = new Date().toISOString();
+        }
+    } catch (error) {
+        log.error(`[handle_quote_request] ${error}`);
+    }
+};
+
+/**
+ * [usage: '@raelbot check for tag [site url]']
+ * checks for CIQ/PPTM tags on a provided site.
+ * initiates a headless browser, intercepts and analyses requests on load of the site homepage.
+ * @param data - the message received from the user.
+ */
+const conduct_tag_check = async data => {
+    log.info(`[conduct_tag_check] received request to check a site for tags...`);
+
+    let pptm = 'not detected:heavy_exclamation_mark:';
+    let ciq = 'not detected:heavy_exclamation_mark:';
+    let platform = 'N/A';
+    let tag_id = 'N/A';
+    let pptm_id = 'N/A';
+    let legacy = false;
+    let site = data.text.split('check for tag ')[1].replace('<','').replace('>','');
+
+    bot.postMessage(data.channel, `<@${data.user}> checking...`, params);  
+
+    try {
+        const browser = await puppeteer.launch({
+            slowMo: 150,
+            args: ['--window-size=1920,1080'],
+        });
+        log.info(`[conduct_tag_check] browser initialised...`);
+    
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1920, height: 1080 });
+    
+        await page.setRequestInterception(true);
+        page.on('request', req => {
+            if (req.url().match(/cloudiq|pptm|cloud-iq/)) {
+                if (req.url().match(/cloudiq.com\/tag\//)) {
+                    ciq = ':white_check_mark:';
+                    if (req.url().match(/-eu-/)) {
+                        platform = 'Aviary :flag-eu:';
+                        tag_id = req.url().split(/tag\//)[1].split('.js')[0];
+                    } else if (req.url().match(/-us-/)) {
+                        platform = 'Beehive :flag-us:';
+                        tag_id = req.url().split(/tag\//)[1].split('.js')[0];
+                    } else if (req.url().match(/-apac-|-au-/)) {
+                        platform = 'Corral :flag-au:'; 
+                        tag_id = req.url().split(/tag\//)[1].split('.js')[0];
+                    }
+
+                    log.info(`[conduct_tag_check] new tag detected:\n${JSON.stringify({ platform: platform, tag_id: tag_id }, null, 4)}`);
+                } else if (req.url().match(/\/tagmanager\/pptm.js/)) {
+                    pptm = ':white_check_mark:';
+                    pptm_id = req.url().split('pptm.js?id=')[1];
+                    log.info(`[conduct_tag_check] pptm tag detected (${pptm_id})...`);
+                } else if (req.url().match(/cloud-iq.com\/cartrecovery\/store.js|cloud-iq.com.au\/cartrecovery\/store.js/)) {
+                    legacy = true;
+                    ciq = ':white_check_mark:';
+                    if (req.url().match(/cloud-iq.com.au/)) {
+                        platform = req.url().split('.cloud-iq.com.au')[0].split('://')[1].replace('platform', 'prod') + ' AU :flag-au:'
+                    } else {
+                        platform = req.url().split('.cloud-iq.com')[0].split('://')[1].replace('platform', 'prod') + ' UK :uk:'
+                    }
+                    tag_id = req.url().split('app_id=')[1];
+
+                    log.info(`[conduct_tag_check] legacy tag detected:\n${JSON.stringify({ platform: platform, tag_id: tag_id }, null, 4)}`);
+                } 
+                req.continue();
+            } else {
+                req.continue();
+            }
+        });
+    
+        log.info(`[conduct_tag_check] browser is navigating to ${site}...`);
+
+        await page.goto(site, { waitUntil: 'networkidle2' });
+        await browser.close();
+        
+        log.info(`[conduct_tag_check] browser analysis has finished.`);
+    
+        if (legacy) {
+            bot.postMessage(data.channel, `<@${data.user}> :rael-lobster: here are the results for ${site}...\n> - *CIQ Tag:* ${ciq}\n> - *App ID:* ${tag_id}\n> - *Environment:* ${platform.replace('prod ','prod1 ')}`, params);  
+        } else {
+            bot.postMessage(data.channel, `<@${data.user}> :rael-lobster: here are the results for ${site}...\n> - *PPTM Tag:* ${pptm}\n> - *CIQ Tag:* ${ciq}\n> - *PPTM ID:* ${pptm_id}\n> - *Tag ID:* ${tag_id}\n> - *Environment:* ${platform}`, params);  
+        }
+    } catch (error) {
+        log.error(`[conduct_tag_check] ${error}`);
     }
 };
 
