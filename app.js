@@ -52,6 +52,7 @@ const slack_credentials = require('./keys/slack');
 const zendesk_credentials = require('./keys/zendesk');
 const bamboo_credentials = require('./keys/bamboohr');
 const trello_credentials = require('./keys/trello');
+const foursquare_credentials = require('./keys/foursquare');
 
 const endpoints = require('./helpers/api_endpoints');
 const jackdaw = require('./helpers/jackdaw');
@@ -100,7 +101,7 @@ const lobster_pattern = /scrappy doo lobster/;
 const time_remaining_pattern = /how long left|how long is left/;
 const help_pattern = /\/help/;
 const owo_pattern = /owo/;
-const pubs_pattern = /where should we go/;
+const pubs_pattern = /what pub should we go to/;
 const affection_pattern = /love you/;
 const tag_pattern = /check for tag/;
 const whos_out_pattern = /whos out|who is out|who\’s out/;
@@ -114,6 +115,8 @@ const spotify_channels = /GB7LT0TKK|CD2FKB621|DP07UQJD8|GQ9QLM4NN|GQRJ5NPDH/;
 const christmas_playlist_id_old = '0vXdwTD04TCEivqsMnj0oM';
 const christmas_playlist_id = '1KfvD9bvlMA1xlH5zrF28B';
 const rael_playlist_id = '0BOcBAiGEypv5rcKggfP0J';
+
+const foursquare_pubs_id = '4bf58dd8d48988d11b941735';
 
 // keep track (globally) of the number of quotes requested per day.
 let requested_quote_status = {
@@ -147,7 +150,7 @@ bot.on('message', (data) => {
 
             if (message_text.match(loubot_pattern)) initiate_loubot(data);
 
-            // if raelbot is waiting from a response, it will be prioritised above anything else.
+            // if raelbot is waiting for a response, it will be prioritised above anything else.
             if (spotify_request_status.pending) {
                 handle_spotify_playlist_add(data, christmas_playlist_id, true);
                 return;
@@ -182,7 +185,7 @@ bot.on('message', (data) => {
             else if (message_text.match(feature_pattern)) handle_feature_request(data);
             else if (message_text.match(cloudia_pattern)) handle_cloudia_message(data);
             else if (message_text.match(clarify_pattern)) clarify_self(data); 
-            else if (message_text.match(pubs_pattern)) handle_random_pub(data);
+            else if (message_text.match(pubs_pattern)) suggest_random_pub(data);
             else if (message_text.match(image_pattern)) show_random_image(data);
             else if (message_text.match(lobster_pattern)) show_random_image(data, true); 
             else if (message_text.match(whos_out_pattern)) handle_bamboo_ooo(data);
@@ -1218,9 +1221,32 @@ const show_random_image = (data, lobster) => {
     }
 };
 
-const handle_random_pub = data => {
-    const pubs = ['tiny rebel','brewhouse','kongs','glassworks'];
-    bot.postMessage(data.channel, `:rael-heineken: :speech_balloon: "you guys should go to *${pubs[Math.floor(Math.random() * pubs.length)]}*"`, params);
+/**
+ * [usage: '@raelbot what pub should we go to?']
+ * uses the foursquare api to suggest a random nearby pub to visit.
+ * also provides the address and a google maps link.
+ * @param data - the message received from the user. 
+ */
+const suggest_random_pub = async data => {
+    log.info(`[suggest_random_pub] received a request to suggest a random pub...`);
+
+    const date = new Date().toISOString().split('T')[0].replace(/-/g,'');
+
+    try {
+        let response = await axios.get(`${endpoints.foursquare_search}?client_id=${foursquare_credentials.id}&client_secret=${foursquare_credentials.secret}&ll=51.478388,-3.178090&radius=300&categoryId=${foursquare_pubs_id}&limit=20&v=${date}`);
+        let locations = response.data.response.venues;
+        let venue = locations[Math.floor(Math.random() * locations.length)];
+
+        log.info(`[suggest_random_pub] raelbot suggests '${venue.name}' at ${venue.location.formattedAddress.toString()}...`);
+
+        bot.postMessage(data.channel, `<@${data.user}> :rael-heineken: :speech_balloon: "you guys should go to *${venue.name}*..." :beers:`, params);
+        
+        setTimeout(() => {
+            bot.postMessage(data.channel, `>>> ${venue.location.formattedAddress.toString().replace(/,/g,'\n')}\nhttps://www.google.com/maps/place/${venue.location.formattedAddress.toString().replace(/ /g,'+')}`, params);
+        },3000);
+    } catch (error) {
+        log.error(`[suggest_random_pub] ${error}`);
+    }
 };
 
 /**
@@ -1336,12 +1362,12 @@ app.get('/status', async (req, res) => {
     if (spotify_credentials.access_token === null) {
         res.status(200).json({
             status: 'INACTIVE',
-            message: 'not logged in...'
+            message: 'not logged in'
         });
     }
     res.status(200).json({
         status: 'ACTIVE',
-        message: 'logged in...',
+        message: 'logged in',
         user:  spotify_credentials.user
     });
 });
