@@ -51,6 +51,7 @@ const log = winston.loggers.get('logger');
 const slack_credentials = require('./keys/slack');
 const zendesk_credentials = require('./keys/zendesk');
 const bamboo_credentials = require('./keys/bamboohr');
+const trello_credentials = require('./keys/trello');
 
 const endpoints = require('./helpers/api_endpoints');
 const jackdaw = require('./helpers/jackdaw');
@@ -58,6 +59,7 @@ const loubot_quotes = require('./helpers/loubot_quotes');
 const taylor_songs = require('./helpers/taylor_songs');
 const rael_messages = require('./helpers/rael_messages');
 const drinks = require('./helpers/rael_drinks');
+const greetings = require('./helpers/greetings');
 
 // initialize the bot.
 const bot = new SlackBot(slack_credentials);
@@ -101,6 +103,8 @@ const owo_pattern = /owo/;
 const pubs_pattern = /where should we go/;
 const affection_pattern = /love you/;
 const tag_pattern = /check for tag/;
+const whos_out_pattern = /whos out|who is out|who\’s out/;
+const trello_pattern = /trello|qa status|qa update/;
 
 const whitelisted_channels = /GDYFAL0HJ|CD2FKB621|GB7LT0TKK|DP07UQJD8|DPFFK0287|DQ2SNH0L9|GQ9QLM4NN|GQRJ5NPDH/;
 const whitelisted_users = /U9C81JU91/;
@@ -181,7 +185,9 @@ bot.on('message', (data) => {
             else if (message_text.match(pubs_pattern)) handle_random_pub(data);
             else if (message_text.match(image_pattern)) show_random_image(data);
             else if (message_text.match(lobster_pattern)) show_random_image(data, true); 
-            else if (message_text.match(greetings_pattern)) handle_greeting(data);
+            else if (message_text.match(whos_out_pattern)) handle_bamboo_ooo(data);
+            else if (message_text.match(trello_pattern)) handle_trello_update(data);
+            else if (message_text.match(greetings_pattern)) issue_greeting(data);
         } else {
             log.warn(`[init] new message received from a non-whitelisted channel...\n${JSON.stringify({ user: data.user, channel: data.channel, ts: data.ts, text: data.text }, null, 4)}`);
         }
@@ -1155,6 +1161,153 @@ const handle_feature_request = data => {
         bot.postMessage(data.channel, `<@${data.user}> thanks for the suggestion - it's been added to the backlog :rael-lobster:`, params);
     } catch (error) {
         log.error(`[handle_feature_request] ${error}`);
+    }
+};
+
+/**
+ * [usage: '@raelbot who is your favourite person?']
+ * raelbot can be very cute.
+ * @param data - the message received from the user.
+ */
+const handle_cloudia_message = data => {
+    log.info(`[handle_cloudia_message] raelbot has only one true love...`);
+    bot.postMessage(data.channel, `<@UER3Q7U4E> is my one true love :heart:`, params);
+};
+
+/**
+ * [usage: '@raelbot who are you?']
+ * raelbot will clarify exactly what it is if requested.
+ * @param data - the message received from the user. 
+ */
+const clarify_self = data => {
+    log.info(`[clarify_self] the user is curious about raelbot's true identity...`);
+    bot.postMessage(data.channel, `<@${data.user}> on all levels except physical, i am Rael Palmer Baker :rael-lobster:`, params);
+};
+
+/**
+ * [usage: '@raelbot hello']
+ * @param data - the message received from the user. 
+ */
+const issue_greeting = data => {
+    log.info(`[issue_greeting] issuing greeting...`);
+    bot.postMessage(data.channel, `<@${data.user}> ${greetings[Math.floor(Math.random() * greetings.length)]}`, params);
+};
+
+/**
+ * TODO.
+ */
+const show_random_image = (data, lobster) => {
+    if (lobster) {
+        params = {
+            "blocks": [
+                {
+                    "type": "image",
+                    "title": {
+                        "type": "plain_text",
+                        "text": "raelbotlovesaheinekentbqh",
+                        "emoji": true
+                    },
+                    "image_url": "https://yt3.ggpht.com/a/AGF-l78XioENTEiORE45NmE7_bClF5-IetCttyKzNg=s900-c-k-c0xffffffff-no-rj-mo",
+                    "alt_text": "raelbot"
+                }
+            ]
+        }
+        bot.postMessage(data.channel, '', params);
+        params = {};
+        return;
+    }
+};
+
+const handle_random_pub = data => {
+    const pubs = ['tiny rebel','brewhouse','kongs','glassworks'];
+    bot.postMessage(data.channel, `:rael-heineken: :speech_balloon: "you guys should go to *${pubs[Math.floor(Math.random() * pubs.length)]}*"`, params);
+};
+
+/**
+ * [usage: '@raelbot who is out?']
+ * get a list of people out of office on annual leave (or working from home) for the current day.
+ * @param data - the message received from the user.
+ */
+const handle_bamboo_ooo = async data => {
+    let date = new Date();
+    date = date.toISOString().split('T')[0];
+    
+    let bamboo = await axios.get(`${endpoints.bamboohr}?start=${date}&end=${date}`, 
+    {
+        headers: {
+            Authorization: `Basic ${Base64.encode(bamboo_credentials.token)}`,
+            Accept: 'application/json'
+        }
+    });
+
+    let ooo_list = [];
+    let employee_list = bamboo.data;
+    for (const e of employee_list) {
+        if (e.type === 'holiday') {
+            continue;
+        }
+        for (const m of jackdaw) {
+            if (m.bamboo_name === e.name) {
+                if (!ooo_list.includes(m.formatted_name)){
+                    ooo_list.push({value: `> ${m.formatted_name}`});
+                    break;
+                }
+            }
+        }
+    }
+    params = {
+        "attachments": [
+            {
+                "fallback": "raelbot",
+                "color": "#882100",
+                "title_icon": "https://files.slack.com/files-pri/T1K84R8AW-FP1D1QYEP/raelbot.jpg",
+                "title": `there are ${ooo_list.length} people out of office today...`,
+                "fields": ooo_list,
+                "footer": `(includes WFH and annual leave for ${date})`
+            }
+        ]
+    }
+    bot.postMessage(data.channel, '', params); 
+    params = {}; 
+};
+
+/**
+ * [usage: '@raelbot trello update']
+ * gets a list of any trello cards in 'todo', 'doing' and 'fixes'.
+ * @param data - the message received from the user. 
+ */
+const handle_trello_update = async data => {
+    const trello_lists = [{id: trello_credentials.todo_list, list: 'To Do'}, {id: trello_credentials.qa_list, list: 'Doing'}, {id: trello_credentials.fixes_list, list: 'Fixes'}];
+
+    bot.postMessage(data.channel, `<@${data.user}> here's a QA update...`, params);
+
+    try {
+        setTimeout(async () => {
+            for (let i=0;i<trello_lists.length;i++) {
+                await setTimeout(() => {}, 5000);
+                let response = await axios.get(`${endpoints.trello}${trello_lists[i].id}/cards?key=${trello_credentials.key}&token=${trello_credentials.token}`);
+                let cards = [];
+                for (const c of response.data) {
+                    cards.push({value: `> <${c.url}|${c.name}>\n>*last modified:* ${new Date(c.dateLastActivity).toGMTString()}`});
+                }
+        
+                params = {
+                    "attachments": [
+                        {
+                            "fallback": "raelbot",
+                            "color": "#882100",
+                            "title": `${cards.length} cards in '${trello_lists[i].list}'...`,
+                            "fields": cards
+                        }
+                    ]
+                };
+    
+                bot.postMessage(data.channel, '', params);
+                params = {};
+            }
+        }, 3000);
+    } catch (error) {
+        console.log(error);
     }
 };
 
