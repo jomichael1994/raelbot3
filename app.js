@@ -163,15 +163,14 @@ bot.on('message', (data) => {
             // else if (message_text.match(fact_pattern)) handle_random_fact(data);
             else if (message_text.match((help_pattern))) help(data);
             else if (message_text.match(tag_pattern)) conduct_tag_check(data);
-            else if (message_text.match(pubs_pattern)) handle_random_pub(data);
             else if (message_text.match(team_pattern)) handle_favourite_team(data);
             else if (message_text.match(dance_pattern)) dance(data);
             else if (message_text.match(rael_just_said_pattern)) handle_quote_add(data);
-            else if (message_text.match(zendesk_pattern)) handle_zendesk_message(data);
-            else if (message_text.match(joke_pattern)) handle_joke(data);
+            else if (message_text.match(zendesk_pattern)) provide_zendesk_update(data);
+            else if (message_text.match(joke_pattern)) tell_joke(data);
             else if (message_text.match(asda_pattern)) handle_asda_message(data);
             else if (message_text.match(tinder_pattern)) provide_tinder_update(data);
-            else if (message_text.match(time_remaining_pattern)) handle_time_remaining(data);
+            else if (message_text.match(time_remaining_pattern)) show_time_remaining(data);
             else if (message_text.match(drink_pattern)) handle_favourite_drink(data);
             else if (message_text.match(affection_pattern)) handle_affection(data);
             else if (message_text.match(image_pattern)) show_random_image(data);
@@ -180,6 +179,7 @@ bot.on('message', (data) => {
             else if (message_text.match(cloudia_pattern)) handle_cloudia_message(data);
             else if (message_text.match(feature_pattern)) handle_feature_request(data);
             else if (message_text.match(clarify_pattern)) clarify_self(data); 
+            else if (message_text.match(pubs_pattern)) handle_random_pub(data);
             else if (message_text.match(greetings_pattern)) handle_greeting(data);
         } else {
             log.warn(`[init] new message received from a non-whitelisted channel...\n${JSON.stringify({ user: data.user, channel: data.channel, ts: data.ts, text: data.text }, null, 4)}`);
@@ -789,6 +789,36 @@ const handle_quote_request = data => {
 };
 
 /**
+ * [usage: '@raelbot rael just said [quote]']
+ * adds a new quote to the list on request. the user submitting is also stored.
+ * @param data - the message from the user.
+ */
+const handle_quote_add = data => {
+    log.info(`[handle_quote_add] received request to add a new quote to the list...`);
+
+    try {
+        let request = data.text.split('rael just said ')[1].trim().replace(/\"/g,'').replace(/\“/g,'').replace(/\”/g,'');
+        let file = JSON.parse(fs.readFileSync('./helpers/quotes.json', 'utf8'));
+        log.info(`[handle_quote_add] quote list has been read...`);
+
+        let new_quote = {};
+        new_quote['quote'] = request;
+        new_quote['consumed'] = false;
+        new_quote['verified'] = false;
+        new_quote['poster'] = data.user;
+        file.push(new_quote);
+
+        fs.writeFileSync('./helpers/quotes.json', JSON.stringify(file, null, 4));
+        
+        log.info(`[handle_quote_add] new quote has been added and written to the list:\n${JSON.stringify(new_quote, null, 4)}`);
+
+        bot.postMessage(data.channel, `<@${data.user}> classic rael! another one to add to the list... :rael: :rael-funsize: :rael-lobster:`, params);
+    } catch (error) {
+        log.error(`[handle_quote_add] ${error}`);
+    }
+};
+
+/**
  * [usage: '@raelbot check for tag [site url]']
  * checks for CIQ/PPTM tags on a provided site.
  * initiates a headless browser, intercepts and analyses requests on load of the site homepage.
@@ -860,7 +890,7 @@ const conduct_tag_check = async data => {
 
         await page.goto(site, { waitUntil: 'networkidle2' });
         await browser.close();
-        
+
         log.info(`[conduct_tag_check] browser analysis has finished.`);
     
         if (legacy) {
@@ -870,6 +900,172 @@ const conduct_tag_check = async data => {
         }
     } catch (error) {
         log.error(`[conduct_tag_check] ${error}`);
+    }
+};
+
+/**
+ * [usage: '@raelbot what is your favourite team?']
+ * raelbot is a big football fan.
+ * @param data - the message received from the user.
+ */
+const handle_favourite_team = data => {
+    log.info(`[handle_favourite_team] received favourite team request...`);
+    bot.postMessage(data.channel, `<@${data.user}> GLORY GLORY MAN UNITED :heart:`, params);  
+};
+
+/**
+ * [usage: '@raelbot dance']
+ * @param data - the message from the user. 
+ */
+const dance = data => {
+    log.info(`[dance] received request to dance...`);
+
+    const dancing_ral = ':gangstas-paraldise:';
+
+    let dance_string = '';
+    for (var i=0;i<100;i++) {
+        if (i % 10 == 0) dance_string += '\n';
+        else dance_string += dancing_ral + ' ';
+    }
+
+    bot.postMessage(data.channel, dance_string, params);
+};
+
+/**
+ * [usage: '@raelbot how many zendesk tickets?']
+ * gives an update on the number of zendesk tickets currently in the new queue.
+ * response includes ticket numbers, links and subjects.
+ * @param data - the message received from the user. 
+ */
+const provide_zendesk_update = async data => {
+    log.info(`[provide_zendesk_update] received zendesk update request...`);
+
+    try {
+        let response = await axios.get(endpoints.zendesk_new,  
+        {
+            headers: {
+                Authorization: `Basic ${Base64.encode(zendesk_credentials.token)}`
+            }
+        });
+    
+        if (response) {
+            let tickets = response.data.results;
+            let field_array = [];
+            let field;
+
+            for (const t of tickets) {
+                field = {
+                    "value": `> [<${endpoints.zendesk_external}/${t.id}|#${t.id}>] \`${t.subject}\``
+                };
+                field_array.push(field);
+            }
+
+            params = {
+                "attachments": [
+                    {
+                        "fallback": "raelbot",
+                        "color": "#882100",
+                        "title": `:rael-confused: :speech_balloon: "there are ${tickets.length} new zendesk tickets..."`,
+                        "fields": field_array,
+                    }
+                ]
+            }
+
+            log.info(`[provide_zendesk_update] results returned ${tickets.length} new tickets...`);
+
+            bot.postMessage(data.channel, '', params); 
+            params = {}; 
+        }
+    } catch (error) {
+        log.error(`[provide_zendesk_update] ${error}`);
+    }
+};
+
+/**
+ * [usage: '@raelbot tell us a joke']
+ * tells a random (dad) joke.
+ * @param data - the message received from the user.
+ */
+const tell_joke = async data => {
+    log.info(`[tell_joke] getting a joke...`);
+
+    try {
+        let response = await axios.get(endpoints.random_joke,
+        {
+            headers: {
+                Accept: 'text/plain'
+            }
+        });
+
+        log.info(`[tell_joke] telling joke '${response.data}'...`);
+        bot.postMessage(data.channel, `:rael-confused: :speech_balloon: \`"${response.data.toLowerCase()}"\` :drum_with_drumsticks:`, params);
+        
+        setTimeout(() => {
+            bot.postMessage(data.channel, `<@${data.user}> i'll see myself out... :man-bowing: :woman-bowing:  :micdrop:`, params);
+        }, 3000);
+    } catch (error) {
+        log.error(`[tell_joke] ${error}`);
+    }
+};
+
+/**
+ * raelbot will get excited if it detects the word 'asda' in a message.
+ * @param {*} data - the message received from the user.
+ */
+const handle_asda_message = data => {
+    log.info(`[handle_asda_message] message contains 'asda'...`);
+    bot.postMessage(data.channel, `YO DID SOMEONE MENTION ASDA? :raised_hands:`, params);
+};
+
+/**
+ * raelbot will give an update on its number of matches if it detects the word 'tinder'.
+ * @param data - the message received from the user.
+ */
+const provide_tinder_update = data => {
+    log.info(`[provide_tinder_update] message contains 'tinder'...`);
+    const matches = Math.floor(Math.random() * 500000);
+    bot.postMessage(data.channel, `<@${data.user}> i do love me some tinder! ${matches} matches so far this week! :muscle: :psychoparty:`, params);
+};
+
+/**
+ * [usage: '@raelbot how long left?']
+ * shows the time remaining of the current working day.
+ * @param data - the message received from the user.
+ */
+const show_time_remaining = data => {
+    log.info(`[show_time_remaining] received request to show time remaining...`);
+
+    const date = new Date();
+    date.setHours(17);
+    date.setMinutes(30);
+    date.setSeconds(00);
+
+    if (date.getDay() !== 0 && date.getDay() !== 6) {
+        if (new Date() < date) {
+            var time_remaining = date - new Date();
+            var hours = Math.floor((time_remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            var minutes = Math.floor((time_remaining % (1000 * 60 * 60)) / (1000 * 60));
+            var seconds = Math.floor((time_remaining % (1000 * 60)) / 1000);
+
+            if (hours < 1) {
+                bot.postMessage(data.channel, `<@${data.user}> ${minutes} minutes, ${seconds} seconds...`, params);
+                setTimeout(function(){ 
+                    bot.postMessage(data.channel, `<@${data.user}> not long now! :gangstas-paraldise:`, params);
+                }, 500);
+            } else if (hours < 2) {
+                bot.postMessage(data.channel, `<@${data.user}> ${hours} hour, ${minutes} minutes, ${seconds} seconds... :face_with_cowboy_hat:`, params);
+            } else {
+                bot.postMessage(data.channel, `<@${data.user}> ${hours} hours, ${minutes} minutes, ${seconds} seconds...`, params);
+            }
+
+            log.info(`[show_time_remaining] ${hours} hours, ${minutes} minutes, ${seconds} seconds remain.`);
+        } else {
+            log.info(`[show_time_remaining] the working day is over.`);
+            bot.postMessage(data.channel, `<@${data.user}> it's time to go home! enjoy your evening! :slightly_smiling_face:`, params);
+        }
+    } else {
+        log.info(`[show_time_remaining] it's the weekend.`);
+        bot.postMessage(data.channel, `<@${data.user}> it's the weekend! have a good one! :psychoparty:`, params);
     }
 };
 
