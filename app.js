@@ -665,7 +665,7 @@ const handle_spotify_logout = () => {
  * @param data - the message received from the user.
  */
 const initiate_loubot = data => {
-    log.info(`[init] handling request to initiate loubot...`);
+    log.info(`[initiate_loubot] handling request to initiate loubot...`);
 
     setTimeout(() => {
         params = {
@@ -682,8 +682,56 @@ const initiate_loubot = data => {
 
     setTimeout(() => {
         bot.postMessage(data.channel, ':face_with_head_bandage:', params);
-        log.info(`[init] loubot request complete.`);
+        log.info(`[initiate_loubot] loubot request complete.`);
     }, 9000);
+};
+
+/**
+ * [usage: '@raelbot please provide a spendesk update']
+ * have raelbot fulfill rael's spendesk ambassadorial duties.
+ * gets the latest tweet from the @spendesk twitter account -- doesn't include retweets.
+ * @param data - the message received from the user.
+ */
+const provide_spendesk_update = data => {
+    log.info(`[provide_spendesk_update] received request for a spendesk update...`);
+
+    try {
+        latestTweets('spendesk', function (err, tweets) {
+            const response = tweets;
+            let tweet;
+            
+            for (let t of response) {
+                if (t.retweet === false) {
+                    tweet = t;
+                    break;
+                }
+            }
+
+            if (tweet) {
+                params = {
+                    "attachments": [
+                        {
+                            "fallback": "raelbot",
+                            "color": "#882100",
+                            "title": `:rael-confused: \"here\'s the <${tweet.url}|latest update> from <https://twitter.com/Spendesk|@spendesk>...\" :mega:`,
+                            "fields": [
+                                {
+                                    "value": `>>>${tweet.content}`
+                                }
+                            ],
+                            "footer": `(*originally posted:* ${tweet.date.toLocaleString()})`
+                        }
+                    ]
+                }
+                bot.postMessage(data.channel, '', params);
+                params = {};
+
+                log.info(`[provide_spendesk_update] update given.`);
+            }
+        });
+    } catch (error) {
+        log.error(`[provide_spendesk_update] ${error}`);
+    }
 };
 
 /**
