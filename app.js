@@ -57,6 +57,7 @@ const jackdaw = require('./helpers/jackdaw');
 const loubot_quotes = require('./helpers/loubot_quotes');
 const taylor_songs = require('./helpers/taylor_songs');
 const rael_messages = require('./helpers/rael_messages');
+const drinks = require('./helpers/rael_drinks');
 
 // initialize the bot.
 const bot = new SlackBot(slack_credentials);
@@ -173,13 +174,13 @@ bot.on('message', (data) => {
             else if (message_text.match(time_remaining_pattern)) show_time_remaining(data);
             else if (message_text.match(drink_pattern)) handle_favourite_drink(data);
             else if (message_text.match(affection_pattern)) handle_affection(data);
-            else if (message_text.match(image_pattern)) show_random_image(data);
-            else if (message_text.match(lobster_pattern)) show_random_image(data, true); 
             else if (message_text.match(owo_pattern)) owo(data);
-            else if (message_text.match(cloudia_pattern)) handle_cloudia_message(data);
             else if (message_text.match(feature_pattern)) handle_feature_request(data);
+            else if (message_text.match(cloudia_pattern)) handle_cloudia_message(data);
             else if (message_text.match(clarify_pattern)) clarify_self(data); 
             else if (message_text.match(pubs_pattern)) handle_random_pub(data);
+            else if (message_text.match(image_pattern)) show_random_image(data);
+            else if (message_text.match(lobster_pattern)) show_random_image(data, true); 
             else if (message_text.match(greetings_pattern)) handle_greeting(data);
         } else {
             log.warn(`[init] new message received from a non-whitelisted channel...\n${JSON.stringify({ user: data.user, channel: data.channel, ts: data.ts, text: data.text }, null, 4)}`);
@@ -1010,7 +1011,7 @@ const tell_joke = async data => {
 
 /**
  * raelbot will get excited if it detects the word 'asda' in a message.
- * @param {*} data - the message received from the user.
+ * @param data - the message received from the user.
  */
 const handle_asda_message = data => {
     log.info(`[handle_asda_message] message contains 'asda'...`);
@@ -1049,7 +1050,7 @@ const show_time_remaining = data => {
 
             if (hours < 1) {
                 bot.postMessage(data.channel, `<@${data.user}> ${minutes} minutes, ${seconds} seconds...`, params);
-                setTimeout(function(){ 
+                setTimeout(() => { 
                     bot.postMessage(data.channel, `<@${data.user}> not long now! :gangstas-paraldise:`, params);
                 }, 500);
             } else if (hours < 2) {
@@ -1066,6 +1067,94 @@ const show_time_remaining = data => {
     } else {
         log.info(`[show_time_remaining] it's the weekend.`);
         bot.postMessage(data.channel, `<@${data.user}> it's the weekend! have a good one! :psychoparty:`, params);
+    }
+};
+
+/**
+ * [usage: '@raelbot what's your favourite drink?']
+ * raelbot is quite the drinker...
+ * @param data - the message received from the user.
+ */
+const handle_favourite_drink = data => {
+    log.info(`[handle_favourite_drink] the user is curious about raelbot's favourite drink...`);
+    bot.postMessage(data.channel, `<@${data.user}> ${drinks[Math.floor(Math.random() * drinks.length)]}`, params);
+};
+
+/**
+ * [usage: '@raelbot i love you']
+ * @param data - the message received from the user.
+ */
+const handle_affection = data => {
+    log.info(`[handle_affection] received a display of affection...`);
+    bot.postMessage(data.channel, `<@${data.user}> i know :slightly_smiling_face:`, params);  
+};
+
+/**
+ * [usage: '@raelbot owo [text]']
+ * 'owoifies' a block of text provided as part of the request.
+ * @param data - the message received from the user.
+ */
+const owo = data => {
+    log.info(`[owo] received a owoify request...`);
+
+    const faces = ["(・`ω´・)",";;w;;","owo","UwU",">w<","^w^"];
+    
+    try {
+        let v = data.text.toLowerCase().split('owo ')[1];
+        log.info(`[owo] provided text: '${v}'...`);
+    
+        v = v.replace(/(?:r|l)/g, "w");
+        v = v.replace(/(?:R|L)/g, "W");
+        v = v.replace(/n([aeiou])/g, 'ny$1');
+        v = v.replace(/N([aeiou])/g, 'Ny$1');
+        v = v.replace(/N([AEIOU])/g, 'Ny$1');
+        v = v.replace(/ove/g, "uv");
+    
+        
+        let exclamationPointCount = 0;
+        let stringsearch = "!";
+        let i;
+
+        for(let i=0; i < v.length; i++) {
+            stringsearch===v[exclamationPointCount++]
+        };
+
+        for (i = 0; i < exclamationPointCount; i++) {
+            v = v.replace("!", " "+ faces[Math.floor(Math.random()*faces.length)]+ " ");
+        }
+
+        log.info(`[owo] converted text: '${v}'...`);
+
+        bot.postMessage(data.channel, `${v}`, params);
+    } catch (error) {
+        log.error(`[owo] ${error}`);
+    }
+};
+
+/**
+ * [usage: '@raelbot feature request [feature]']
+ * adds a feature request to the backlog.
+ * @param data - the message received from the user.
+ */
+const handle_feature_request = data => {
+    log.info(`[handle_feature_request] received a feature request...`);
+
+    try {
+        let request = data.text.split('feature request')[1].trim();
+        let file = JSON.parse(fs.readFileSync('./helpers/requests.json', 'utf8'));
+        log.info(`[handle_feature_request] feature request list has been read...`);
+
+        let req_obj = {};
+        req_obj['message'] = request;
+        req_obj['user'] = data.user;
+        file.push(req_obj);
+
+        fs.writeFileSync('./helpers/requests.json', JSON.stringify(file, null, 4));
+        log.info(`[handle_feature_request] feature request has been added to the backlog successfully...\n${JSON.stringify(req_obj, null, 4)}`);
+
+        bot.postMessage(data.channel, `<@${data.user}> thanks for the suggestion - it's been added to the backlog :rael-lobster:`, params);
+    } catch (error) {
+        log.error(`[handle_feature_request] ${error}`);
     }
 };
 
