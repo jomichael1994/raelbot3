@@ -103,6 +103,7 @@ const help_pattern = /\/help/;
 const owo_pattern = /owo/;
 const pubs_pattern = /what pub should we go to/;
 const affection_pattern = /love you/;
+const chonker_pattern = /random chonker/;
 const tag_pattern = /check for tag/;
 const whos_out_pattern = /whos out|who is out|who\’s out/;
 const trello_pattern = /trello|qa status|qa update/;
@@ -190,6 +191,7 @@ bot.on('message', (data) => {
             else if (message_text.match(lobster_pattern)) show_random_image(data, true); 
             else if (message_text.match(whos_out_pattern)) handle_bamboo_ooo(data);
             else if (message_text.match(trello_pattern)) handle_trello_update(data);
+            else if (message_text.match(chonker_pattern)) share_random_chonker(data);
             else if (message_text.match(greetings_pattern)) issue_greeting(data);
         } else {
             log.warn(`[init] new message received from a non-whitelisted channel...\n${JSON.stringify({ user: data.user, channel: data.channel, ts: data.ts, text: data.text }, null, 4)}`);
@@ -1194,6 +1196,43 @@ const clarify_self = data => {
 const issue_greeting = data => {
     log.info(`[issue_greeting] issuing greeting...`);
     bot.postMessage(data.channel, `<@${data.user}> ${greetings[Math.floor(Math.random() * greetings.length)]}`, params);
+};
+
+/**
+ * [usage: '@raelbot random chonker']
+ * gets a random big chungus from r/chonkers.
+ * @param data - the message received from the user. 
+ */
+const share_random_chonker = async data => {
+    try {
+        let response = await axios.get(`http://www.reddit.com/r/chonkers.json`);
+        let chonkers = response.data.data.children;
+
+        chonkers = chonkers.filter(chonk => chonk.data.ups > 25);
+        chonkers = chonkers.filter(chonk => chonk.data.url.match(/.jpg|.png/));
+        chonkers = chonkers.filter(chonk => chonk.data.over_18 === false);
+        
+        let chonker = chonkers[Math.floor(Math.random() * chonkers.length)].data;
+        
+        params = {
+            "blocks": [
+                {
+                    "type": "image",
+                    "title": {
+                        "type": "plain_text",
+                        "text": chonker.title,
+                        "emoji": true
+                    },
+                    "image_url": chonker.url,
+                    "alt_text": "raelbot"
+                }
+            ]
+        }
+        bot.postMessage(data.channel, '', params);
+        params = {};
+    } catch (error) {
+        log.error(`[share_random_chonker] ${error}`);
+    }
 };
 
 /**
