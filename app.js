@@ -103,7 +103,7 @@ const help_pattern = /\/help/;
 const owo_pattern = /owo/;
 const pubs_pattern = /what pub should we go to/;
 const affection_pattern = /love you/;
-const chonker_pattern = /random chonker/;
+const chonker_pattern = /random chonker|big chungus/;
 const tag_pattern = /check for tag/;
 const whos_out_pattern = /whos out|who is out|who\’s out/;
 const trello_pattern = /trello|qa status|qa update/;
@@ -1204,8 +1204,10 @@ const issue_greeting = data => {
  * @param data - the message received from the user. 
  */
 const share_random_chonker = async data => {
+    log.info(`[share_random_chonker] user has requested a chungus...`);
+
     try {
-        let response = await axios.get(`http://www.reddit.com/r/chonkers.json`);
+        let response = await axios.get(endpoints.chonkers);
         let chonkers = response.data.data.children;
 
         chonkers = chonkers.filter(chonk => chonk.data.ups > 25);
@@ -1228,6 +1230,9 @@ const share_random_chonker = async data => {
                 }
             ]
         }
+
+        log.info(`[share_random_chonker] sharing '${chonker.title}' (${chonker.url})...`);
+
         bot.postMessage(data.channel, '', params);
         params = {};
     } catch (error) {
