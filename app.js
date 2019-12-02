@@ -99,14 +99,16 @@ const help_pattern = /\/help/;
 const owo_pattern = /owo/;
 const pubs_pattern = /where should we go/;
 const affection_pattern = /love you/;
+const tag_pattern = /check for tag/;
 
 const whitelisted_channels = /GDYFAL0HJ|CD2FKB621|GB7LT0TKK|DP07UQJD8|DPFFK0287|DQ2SNH0L9|GQ9QLM4NN|GQRJ5NPDH/;
 const whitelisted_users = /U9C81JU91/;
 
 const spotify_pattern = /play|dj|what song is this|next song|previous song|spotify status|shuffle|change volume to|christmas party playlist/;
 const spotify_channels = /GB7LT0TKK|CD2FKB621|DP07UQJD8|GQ9QLM4NN|GQRJ5NPDH/;
-// const christmas_playlist_id = '0vXdwTD04TCEivqsMnj0oM';
+const christmas_playlist_id_old = '0vXdwTD04TCEivqsMnj0oM';
 const christmas_playlist_id = '1KfvD9bvlMA1xlH5zrF28B';
+const rael_playlist_id = '0BOcBAiGEypv5rcKggfP0J';
 
 // keep track (globally) of the number of quotes requested per day.
 let requested_quote_status = {
@@ -140,11 +142,13 @@ bot.on('message', (data) => {
 
             if (message_text.match(loubot_pattern)) initiate_loubot(data);
 
+            // if raelbot is waiting from a response, it will be prioritised above anything else.
             if (spotify_request_status.pending) {
                 handle_spotify_playlist_add(data, christmas_playlist_id, true);
                 return;
             }
 
+            // any spotify requests must come from a whitelisted channel, otherwise functionality is disabled.
             if (message_text.match(spotify_pattern)) {
                 if (data.channel.match(spotify_channels)) {
                     handle_initial_spotify_request(data, message_text);
@@ -155,13 +159,12 @@ bot.on('message', (data) => {
             }
 
             if (message_text.match(/spendesk/) && message_text.match(spendesk_pattern)) provide_spendesk_update(data);
+            else if (message_text.match(/quote/) && message_text.match(requested_quote_pattern)) handle_requested_quote(data);
             else if (message_text.match(fact_pattern)) handle_random_fact(data);
             else if (message_text.match((help_pattern))) help(data);
-            else if (message_text.match(/check for tag/)) conduct_tag_check(data);
+            else if (message_text.match(tag_pattern)) conduct_tag_check(data);
             else if (message_text.match(pubs_pattern)) handle_random_pub(data);
-            else if (message_text.match(the_donald_pattern)) provide_trump_quote(data);
             else if (message_text.match(team_pattern)) handle_favourite_team(data);
-            else if (message_text.match(/quote/) && message_text.match(requested_quote_pattern)) handle_requested_quote(data);
             else if (message_text.match(dance_pattern)) dance(data);
             else if (message_text.match(rael_just_said_pattern)) handle_quote_add(data);
             else if (message_text.match(zendesk_pattern)) handle_zendesk_message(data);
@@ -184,39 +187,17 @@ bot.on('message', (data) => {
     }
 });
 
-// initiates loubot and gives a random quote.
-const initiate_loubot = data => {
-    log.info(`[init] handling request to initiate loubot...`);
-
-    setTimeout(() => {
-        params = {
-            icon_emoji: ':louise:',
-            username: 'loubot'
-        };
-        bot.postMessage(data.channel, `:speech_balloon: \`"${loubot_quotes[Math.floor(Math.random() * loubot_quotes.length)]}"\``, params);
-        params = {};
-    }, 1500)
-    
-    setTimeout(() => {
-        bot.postMessage(data.channel, ':rael-lobster: :speech_balloon: "*woof* what was that???????" :flushed: :flushed:', params);
-    }, 7500);
-
-    setTimeout(() => {
-        bot.postMessage(data.channel, ':face_with_head_bandage:', params);
-        log.info(`[init] loubot request complete.`);
-    }, 9000);
-};
-
+/**
+ * all spotify requests are initially handled here.
+ * the appropriate function is called depending on what the user has requested.
+ */
 const handle_initial_spotify_request = (data, message_text) => {
     log.info('[spotify] [handle_initial_spotify_request] received a spotify request...');
 
     params = {
         username: 'dj raelbot'
     };
-    if (message_text.match(/play something rael will enjoy/)) {
-        data.text = 'dj songs ral will enjoy'
-        handle_spotify_dj(data);
-    } 
+    if (message_text.match(/play something rael will enjoy/)) handle_spotify_dj(data, rael_playlist_id);
     else if (message_text.match(/play christmas party playlist/)) handle_spotify_dj(data, christmas_playlist_id);
     else if (message_text.match(/show christmas party playlist/)) show_spotify_playlist(data, christmas_playlist_id);
     else if (message_text.match(/add /) && message_text.match(/christmas party playlist/)) handle_spotify_playlist_add(data, christmas_playlist_id);
@@ -230,6 +211,11 @@ const handle_initial_spotify_request = (data, message_text) => {
     return;
 };
 
+/**
+ * [usage: '@raelbot spotify status']
+ * tells the user whether spotify is currently authenticated or not.
+ * @param data - the message received from the user.
+ */
 const show_spotify_status = data => {
     log.info('[spotify] [show_spotify_status] showing spotify status...');
 
@@ -240,6 +226,13 @@ const show_spotify_status = data => {
     }
 };
 
+/**
+ * used across spotify playback functions.
+ * will search for a track, album or playlist - depending on the provided request.
+ * @param query - the search query to use.
+ * @param type - the type of search (track, album or playlist).
+ * @returns results if the request was successful.
+ */
 const handle_spotify_search = async (query, type) => {
     log.info(`[spotify] [handle_spotify_search] searching for ${type}: '${query}'...`);
 
@@ -286,6 +279,12 @@ const handle_spotify_search = async (query, type) => {
     }
 };
 
+/**
+ * [usage: '@raelbot play [request]']
+ * plays an individual track.
+ * there's a chance the request is refused and overwritten with a random taylor swift song.
+ * @param data - the message received from the user.
+ */
 const play_spotify_track = async data => {
     log.info(`[spotify] [play_spotify_track] preparing to play track...`);
 
@@ -334,6 +333,13 @@ const play_spotify_track = async data => {
     }
 };
 
+/**
+ * [usage: '@raelbot dj (album) [request]']
+ * handles the streaming of a playlist or album.
+ * a playlist id can be passed to play a specific playlist. useful if requesting a private playlist.
+ * @param data - the message from the user.
+ * @param id - (optional) a specific playlist id.
+ */
 const handle_spotify_dj = async (data, id) => {
     log.info(`[spotify] [handle_spotify_dj] preparing to dj...`);
 
@@ -385,6 +391,7 @@ const handle_spotify_dj = async (data, id) => {
             log.error(`[spotify] [handle_spotify_dj] ${error.response.status} - ${error.response.statusText}`);
 
             if (error.response.status === 401) {
+                handle_spotify_logout();
                 bot.postMessage(data.channel, `<@${data.user}> please authenticate and try again...`, params);
             } else if (error.response.statusText == 'Not Found') {
                 bot.postMessage(data.channel, `<@${data.user}> sorry, something went wrong :face_with_head_bandage:\n\`${error}\``, params);
@@ -396,6 +403,11 @@ const handle_spotify_dj = async (data, id) => {
     }
 };
 
+/**
+ * shows information about the track currently being played.
+ * @param data - the message received from the user.
+ * @param basic - (optional) if true, the response will not contain any urls, album info or release dates.
+ */
 const show_spotify_track_status = async (data, basic) => {
     log.info(`[spotify] [show_spotify_track_status] showing track status...`);
 
@@ -424,6 +436,9 @@ const show_spotify_track_status = async (data, basic) => {
         }
     } catch (error) {
         if (error.response) {
+            if (error.response.status === 401) {
+                handle_spotify_logout();
+            }
             log.error(`[spotify] [show_spotify_track_status] ${error.response.status} - ${error.response.statusText}`);
         } else {
             log.error(`[spotify] [show_spotify_track_status] ${error}`);
@@ -431,6 +446,11 @@ const show_spotify_track_status = async (data, basic) => {
     }
 };
 
+/**
+ * gets an individual playlist using a provided playlist id.
+ * @param playlist_id - the playlist id.
+ * @returns playlist info if the request was successful.
+ */
 const get_spotify_playlist = async playlist_id => {
     log.info(`[spotify] [get_spotify_playlist] getting requested playlist...`);
 
@@ -453,13 +473,23 @@ const get_spotify_playlist = async playlist_id => {
         return playlist_obj;
     } catch (error) {
         if (error.response) {
+            if (error.response.status === 401) {
+                handle_spotify_logout();
+            }
             log.error(`[spotify] [get_spotify_playlist] ${error.response.status} - ${error.response.statusText}`);
         } else {
             log.error(`[spotify] [get_spotify_playlist] ${error}`);
         }
+        return false;
     }
 };
 
+/**
+ * [usage: '@raelbot show [playlist]']
+ * shows a playlist, along with (maximum) 100 tracks it contains.
+ * @param data - the message received from the user.
+ * @param playlist_id - the playlist id.
+ */
 const show_spotify_playlist = async (data, playlist_id) => {
     log.info(`[spotify] [show_spotify_playlist] showing playlist...`);
 
@@ -469,12 +499,20 @@ const show_spotify_playlist = async (data, playlist_id) => {
     bot.postMessage(data.channel, `<@${data.user}> <${playlist_obj.url}|${playlist_obj.name}> :santa: :christmas_tree: :mother_christmas:`, params);
 };
 
+/**
+ * [usage: '@raelbot add [request] to [playlist]']
+ * add an individual track to a specified playlist.
+ * raelbot will first search for the track and then prompt the user to confirm.
+ * @param data - the message received from the user.
+ * @param playlist_id - the playlist id.
+ * @param confirm - (optional) if raelbot is waiting for confirmation of a request, this is required.
+ */
 const handle_spotify_playlist_add = async (data, playlist_id, confirm) => {
     if (!confirm) {
         let request = data.text.toLowerCase().split('add ')[1].replace(' to the christmas ', ' to christmas ').split(' to christmas')[0].replace(' by ', ' ').trim();
         let results = await handle_spotify_search(request, 'track');
 
-        bot.postMessage(data.channel, `<@${data.user}> found *<${results.url}|${results.name}>* by *${results.artist}*...`, params);
+        bot.postMessage(data.channel, `found *<${results.url}|${results.name}>* by *${results.artist}*...`, params);
         
         setTimeout(() => {
             bot.postMessage(data.channel, `<@${data.user}> is this correct?`, params);
@@ -485,7 +523,7 @@ const handle_spotify_playlist_add = async (data, playlist_id, confirm) => {
     } else {
         if (data.text.toLowerCase().match(/ yes/)) {
             try {
-                await axios.post(`https://api.spotify.com/v1/playlists/${playlist_id}/tracks`,
+                await axios.post(`${endpoints.spotify_playlist}/${playlist_id}/tracks`,
                 {
                     "uris": [spotify_request_status.uri]
                 },
@@ -501,22 +539,30 @@ const handle_spotify_playlist_add = async (data, playlist_id, confirm) => {
                 if (error.response) {
                     bot.postMessage(data.channel, `:face_with_head_bandage:\n\`${error}\``, params);
 
-                    log.error(`[spotify] [toggle_spotify_shuffle] ${error.response.status} - ${error.response.statusText}`);
+                    log.error(`[spotify] [handle_spotify_playlist_add] ${error.response.status} - ${error.response.statusText}`);
+
+                    if (error.response.status === 401) {
+                        handle_spotify_logout();
+                    }
                 } else {
-                    log.error(`[spotify] [toggle_spotify_shuffle] ${error}`);
+                    log.error(`[spotify] [handle_spotify_playlist_add] ${error}`);
                 }
             }
-    
-            // log.info(`[spotify] [handle_spotify_dj] playing ${type} '${play_obj.name}'...`);
-    
-            // bot.postMessage(data.channel, `:rael-confused: :speech_balloon: "now streaming ${type} *<${play_obj.url}|${play_obj.name}>*${type === 'album' ? ` by *${play_obj.artist}*` : ''}..." :speaker: :musical_note: :gangstas-paraldise:`, params);
-            // setTimeout(() => { show_spotify_track_status(data, true); }, 2000);
+        } else {
+            bot.postMessage(data.channel, `<@${data.user}> ok, i won't add it :sad_cowboy:`, params);
+
+            log.info(`[spotify] [handle_spotify_playlist_add] user decided against adding the returned track.`);
         }
         spotify_request_status.pending = false;
         spotify_request_status.pending.uri = null;
     }
 };
 
+/**
+ * [usage: '@raelbot [enable/disable] shuffle']
+ * toggle the shuffle status for playback.
+ * @param data - the message received from the user.
+ */
 const toggle_spotify_shuffle = async data => {
     log.info(`[spotify] [toggle_spotify_shuffle] received request to toggle shuffle...`);
 
@@ -542,6 +588,7 @@ const toggle_spotify_shuffle = async data => {
             log.error(`[spotify] [toggle_spotify_shuffle] ${error.response.status} - ${error.response.statusText}`);
 
             if (error.response.status === 401) {
+                handle_spotify_logout();
                 bot.postMessage(data.channel, `<@${data.user}> please authenticate and try again...`, params);
             } 
         } else {
@@ -550,6 +597,11 @@ const toggle_spotify_shuffle = async data => {
     }
 };
 
+/**
+ * [usage: '@raelbot change volume to [percentage]']
+ * set the volume of playback to the requested level.
+ * @param data - the message received from the user.
+ */
 const adjust_spotify_volume = async data => {
     log.info(`[spotify] [adjust_spotify_volume] received request to change volume...`);
 
@@ -572,6 +624,7 @@ const adjust_spotify_volume = async data => {
             log.error(`[spotify] [adjust_spotify_volume] ${error.response.status} - ${error.response.statusText}`);
 
             if (error.response.status === 401) {
+                handle_spotify_logout();
                 bot.postMessage(data.channel, `<@${data.user}> please authenticate and try again...`, params);
             } 
         } else {
@@ -580,7 +633,11 @@ const adjust_spotify_volume = async data => {
     }
 };
 
-const handle_spotify_login = (credentials) => {
+/**
+ * authenticates the spotify user logging in.
+ * @param credentials - the credentials passed from authentication.
+ */
+const handle_spotify_login = credentials => {
     log.info(`[spotify] [handle_spotify_login] received authentication request...`);
 
     spotify_credentials.access_token = credentials.access_token;
@@ -590,6 +647,9 @@ const handle_spotify_login = (credentials) => {
     log.info(`[spotify] [handle_spotify_login] user successfully logged in as ${spotify_credentials.user}.`);
 };
 
+/**
+ * removes the credentials of any spotify user currently logged in.
+ */
 const handle_spotify_logout = () => {
     log.info(`[spotify] [handle_spotify_logout] logging out user ${spotify_credentials.user}...`);
     
@@ -600,16 +660,51 @@ const handle_spotify_logout = () => {
     log.info(`[spotify] [handle_spotify_logout] user has been successfully logged out.`);
 };
 
+/**
+ *  initiates loubot and gives a random quote.
+ * @param data - the message received from the user.
+ */
+const initiate_loubot = data => {
+    log.info(`[init] handling request to initiate loubot...`);
+
+    setTimeout(() => {
+        params = {
+            icon_emoji: ':louise:',
+            username: 'loubot'
+        };
+        bot.postMessage(data.channel, `:speech_balloon: \`"${loubot_quotes[Math.floor(Math.random() * loubot_quotes.length)]}"\``, params);
+        params = {};
+    }, 1500)
+    
+    setTimeout(() => {
+        bot.postMessage(data.channel, ':rael-lobster: :speech_balloon: "*woof* what was that???????" :flushed: :flushed:', params);
+    }, 7500);
+
+    setTimeout(() => {
+        bot.postMessage(data.channel, ':face_with_head_bandage:', params);
+        log.info(`[init] loubot request complete.`);
+    }, 9000);
+};
+
+/**
+ * listens for requests and uses the passed query parameters to authenticate a spotify user.
+ */
 app.post('/auth/login', async (req, res) => {
     log.info(`[spotify] [/auth/login] request received...`);
     handle_spotify_login(req.query);
 });
 
+/**
+ * on request the current spotify user is logged out.
+ */
 app.post('/auth/logout', async (req, res) => {
     log.info(`[spotify] [/auth/logout] request received...`);
     handle_spotify_logout();
 });
 
+/**
+ * returns the status of any currently authenticated spotify users.
+ */
 app.get('/status', async (req, res) => {
     log.info(`[spotify] [/status] request received...`);
 
