@@ -1258,43 +1258,48 @@ const handle_bamboo_ooo = async data => {
     let date = new Date();
     date = date.toISOString().split('T')[0];
     
-    let bamboo = await axios.get(`${endpoints.bamboohr}?start=${date}&end=${date}`, 
-    {
-        headers: {
-            Authorization: `Basic ${Base64.encode(bamboo_credentials.token)}`,
-            Accept: 'application/json'
-        }
-    });
-
-    let ooo_list = [];
-    let employee_list = bamboo.data;
-    for (const e of employee_list) {
-        if (e.type === 'holiday') {
-            continue;
-        }
-        for (const m of jackdaw) {
-            if (m.bamboo_name === e.name) {
-                if (!ooo_list.includes(m.formatted_name)){
-                    ooo_list.push({value: `> ${m.formatted_name}`});
-                    break;
+    try {
+        let bamboo = await axios.get(`${endpoints.bamboohr}?start=${date}&end=${date}`, 
+        {
+            headers: {
+                Authorization: `Basic ${Base64.encode(bamboo_credentials.token)}`,
+                Accept: 'application/json'
+            }
+        });
+    
+        let ooo_list = [];
+        let employee_list = bamboo.data;
+        for (const e of employee_list) {
+            if (e.type === 'holiday') {
+                continue;
+            }
+            for (const m of jackdaw) {
+                if (m.bamboo_name === e.name) {
+                    if (!ooo_list.includes(m.formatted_name)){
+                        ooo_list.push({value: `> ${m.formatted_name}`});
+                        break;
+                    }
                 }
             }
         }
+
+        params = {
+            "attachments": [
+                {
+                    "fallback": "raelbot",
+                    "color": "#882100",
+                    "title_icon": "https://files.slack.com/files-pri/T1K84R8AW-FP1D1QYEP/raelbot.jpg",
+                    "title": `there are ${ooo_list.length} people out of office today...`,
+                    "fields": ooo_list,
+                    "footer": `(includes WFH and annual leave for ${date})`
+                }
+            ]
+        }
+        bot.postMessage(data.channel, '', params); 
+        params = {}; 
+    } catch (error) {
+        log.error(`[handle_bamboo_ooo] ${error}`);
     }
-    params = {
-        "attachments": [
-            {
-                "fallback": "raelbot",
-                "color": "#882100",
-                "title_icon": "https://files.slack.com/files-pri/T1K84R8AW-FP1D1QYEP/raelbot.jpg",
-                "title": `there are ${ooo_list.length} people out of office today...`,
-                "fields": ooo_list,
-                "footer": `(includes WFH and annual leave for ${date})`
-            }
-        ]
-    }
-    bot.postMessage(data.channel, '', params); 
-    params = {}; 
 };
 
 /**
@@ -1333,9 +1338,25 @@ const handle_trello_update = async data => {
             }
         }, 3000);
     } catch (error) {
-        console.log(error);
+        log.error(`[handle_trello_update] ${error}`);
     }
 };
+
+// TODO: refactor
+// cron.schedule("10 09 * * 1-5", async () => {
+//     const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+//     await axios.post(endpoints.paypal_cardiff, 
+//     {
+//         "text": `<!here> happy ${days[new Date().getDay()]}! here's a morning update... :rael-lobster:`
+//     });
+//     setTimeout(async () => { await provide_zendesk_update(); }, 10000);
+//     setTimeout(async () => { await provide_zendesk_update(); }, 20000);
+//     setTimeout(async () => { await handle_bamboo_ooo(); }, 30000);
+// },
+// {
+//     scheduled: true,
+//     timezone: "Europe/London"
+// });
 
 /**
  * listens for requests and uses the passed query parameters to authenticate a spotify user.
