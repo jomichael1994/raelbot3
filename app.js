@@ -98,7 +98,7 @@ const affection_pattern = /love you/;
 const whitelisted_channels = /GDYFAL0HJ|CD2FKB621|GB7LT0TKK|DP07UQJD8|DPFFK0287|DQ2SNH0L9|GQ9QLM4NN/;
 const whitelisted_users = /U9C81JU91/;
 
-const spotify_pattern = /play|dj|what song is this|next song|previous song|spotify status|christmas party playlist/;
+const spotify_pattern = /play|dj|what song is this|next song|previous song|spotify status|shuffle|change volume to|christmas party playlist/;
 const spotify_channels = /GB7LT0TKK|CD2FKB621|DP07UQJD8|GQ9QLM4NN/;
 const christmas_playlist_id = '0vXdwTD04TCEivqsMnj0oM';
 
@@ -205,12 +205,15 @@ const handle_initial_spotify_request = (data, message_text) => {
     if (message_text.match(/play something rael will enjoy/)) {
         data.text = 'dj songs ral will enjoy'
         handle_spotify_dj(data);
-    }
-    else if (message_text.match(/show christmas party playlist/)) handle_spotify_playlist_request(data, christmas_playlist_id);
+    } 
+    else if (message_text.match(/play christmas party playlist/)) handle_spotify_dj(data, christmas_playlist_id);
+    else if (message_text.match(/show christmas party playlist/)) show_spotify_playlist(data, christmas_playlist_id);
     else if (message_text.match(/play/)) play_spotify_track(data);
     else if (message_text.match(/dj/)) handle_spotify_dj(data);
     else if (message_text.match(/what song is this/)) show_spotify_track_status(data);
     else if (message_text.match(/next song|previous song/)) handle_spotify_track_skip(data);
+    else if (message_text.match(/enable shuffle|disable shuffle/)) toggle_spotify_shuffle(data);
+    else if (message_text.match(/change volume to/)) adjust_spotify_volume(data);
     else if (message_text.match(/spotify status/)) show_spotify_status(data);
     return;
 };
@@ -319,30 +322,36 @@ const play_spotify_track = async data => {
     }
 };
 
-const handle_spotify_dj = async data => {
+const handle_spotify_dj = async (data, id) => {
     log.info(`[spotify] [handle_spotify_dj] preparing to dj...`);
 
-    let request = data.text.toLowerCase().split('dj ')[1];
+    let play_obj;
     let type = 'playlist';
-    
-    if (request.match(/album /)) {
-        type = 'album';
-        request = request.split('album ')[1];
-        if (request.match(/ by /)) {
-            request = `album:${request.split(' by ')[0]} artist:${request.split(' by ')[1]}`;
-        } else {
-            request = `album:${request}`; 
-        }
-    } 
 
-    log.info(`[spotify] [handle_spotify_dj] ${type} request: '${request}'...`);
-
-    if (request.match(/taylor swift/)) {
-        log.info(`[spotify] [handle_spotify_dj] taylor detected...`);
-        bot.postMessage(data.channel, `<@${data.user}> YASSSSS TAYLOR SLAY QUEEN :raised_hands:`, params);
-    } 
+    if (!id) {
+        let request = data.text.toLowerCase().split('dj ')[1];
+        
+        if (request.match(/album /)) {
+            type = 'album';
+            request = request.split('album ')[1];
+            if (request.match(/ by /)) {
+                request = `album:${request.split(' by ')[0]} artist:${request.split(' by ')[1]}`;
+            } else {
+                request = `album:${request}`; 
+            }
+        } 
     
-    let play_obj = await handle_spotify_search(request, type);
+        log.info(`[spotify] [handle_spotify_dj] ${type} request: '${request}'...`);
+    
+        if (request.match(/taylor swift/)) {
+            log.info(`[spotify] [handle_spotify_dj] taylor detected...`);
+            bot.postMessage(data.channel, `<@${data.user}> YASSSSS TAYLOR SLAY QUEEN :raised_hands:`, params);
+        } 
+        
+        play_obj = await handle_spotify_search(request, type);
+    } else {
+        play_obj = await get_spotify_playlist(id);
+    }
 
     try {
         await axios.put(endpoints.spotify_play,
@@ -410,8 +419,8 @@ const show_spotify_track_status = async (data, basic) => {
     }
 };
 
-const handle_spotify_playlist_request = async (data, playlist_id) => {
-    log.info(`[spotify] [handle_spotify_playlist_request] showing playlist...`);
+const get_spotify_playlist = async playlist_id => {
+    log.info(`[spotify] [get_spotify_playlist] getting requested playlist...`);
 
     try {
         let response = await axios.get(`${endpoints.spotify_playlist}/${playlist_id}`,
@@ -421,14 +430,92 @@ const handle_spotify_playlist_request = async (data, playlist_id) => {
             }
         });
 
-        log.info(`[spotify] [handle_spotify_playlist_request] playlist: ${response.data.name}...`);
+        let playlist_obj = {
+            name: response.data.name,
+            url: response.data.external_urls.spotify,
+            uri: response.data.uri
+        };
 
-        bot.postMessage(data.channel, `<@${data.user}> <${response.data.external_urls.spotify}|${response.data.name}> :santa: :christmas_tree: :mother_christmas:`, params);
+        log.info(`[spotify] [get_spotify_playlist] found playlist:\n${JSON.stringify(playlist_obj, null, 4)}`);
+
+        return playlist_obj;
     } catch (error) {
         if (error.response) {
-            log.error(`[spotify] [handle_spotify_playlist_request] ${error.response.status} - ${error.response.statusText}`);
+            log.error(`[spotify] [get_spotify_playlist] ${error.response.status} - ${error.response.statusText}`);
         } else {
-            log.error(`[spotify] [handle_spotify_playlist_request] ${error}`);
+            log.error(`[spotify] [get_spotify_playlist] ${error}`);
+        }
+    }
+};
+
+const show_spotify_playlist = async (data, playlist_id) => {
+    log.info(`[spotify] [show_spotify_playlist] showing playlist...`);
+
+    let playlist_obj = await get_spotify_playlist(playlist_id);
+    log.info(`[spotify] [show_spotify_playlist] playlist: ${playlist_obj.name}...`);
+
+    bot.postMessage(data.channel, `<@${data.user}> <${playlist_obj.url}|${playlist_obj.name}> :santa: :christmas_tree: :mother_christmas:`, params);
+};
+
+const toggle_spotify_shuffle = async data => {
+    log.info(`[spotify] [toggle_spotify_shuffle] received request to toggle shuffle...`);
+
+    let shuffle_status = false;
+    if (data.text.match(/enable shuffle/)) {
+        shuffle_status = true;
+    }
+
+    try {
+        await axios.put(`${endpoints.spotify_shuffle}?state=${shuffle_status}`,
+        {
+            headers: {
+                "Authorization": `Bearer ${spotify_credentials.access_token}`
+            }
+        });
+    
+        log.info(`[spotify] [toggle_spotify_shuffle] shuffle has been ${shuffle_status === true ? 'enabled' : 'disabled'}...`);
+
+        bot.postMessage(data.channel, `<@${data.user}> shuffle has been ${shuffle_status === true ? 'enabled' : 'disabled'}...`, params);
+    } catch (error) {
+        console.log(error);
+        if (error.response) {
+            log.error(`[spotify] [toggle_spotify_shuffle] ${error.response.status} - ${error.response.statusText}`);
+
+            if (error.response.status === 401) {
+                bot.postMessage(data.channel, `<@${data.user}> please authenticate and try again...`, params);
+            } 
+        } else {
+            log.error(`[spotify] [toggle_spotify_shuffle] ${error}`);
+        }
+    }
+};
+
+const adjust_spotify_volume = async data => {
+    log.info(`[spotify] [adjust_spotify_volume] received request to change volume...`);
+
+    let volume_percentage = data.text.split(/change volume to /)[1].replace('%','').trim();
+
+    try {
+        await axios.put(`${endpoints.spotify_volume}?volume_percent=${volume_percentage}`,
+        {
+            headers: {
+                "Authorization": `Bearer ${spotify_credentials.access_token}`
+            }
+        });
+    
+        log.info(`[spotify] [adjust_spotify_volume] volume has been changed to ${volume_percentage}%...`);
+
+        bot.postMessage(data.channel, `<@${data.user}> done...`, params);
+    } catch (error) {
+        console.log(error);
+        if (error.response) {
+            log.error(`[spotify] [adjust_spotify_volume] ${error.response.status} - ${error.response.statusText}`);
+
+            if (error.response.status === 401) {
+                bot.postMessage(data.channel, `<@${data.user}> please authenticate and try again...`, params);
+            } 
+        } else {
+            log.error(`[spotify] [adjust_spotify_volume] ${error}`);
         }
     }
 };
