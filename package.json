@@ -1,0 +1,26 @@
+{
+  "name": "raelbot3",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "James Michael",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.19.0",
+    "chalk": "^3.0.0",
+    "express": "^4.17.1",
+    "fs": "0.0.1-security",
+    "js-base64": "^2.5.1",
+    "latest-tweets": "^1.0.4",
+    "node-cron": "^2.0.3",
+    "puppeteer": "^2.0.0",
+    "qs": "^6.9.1",
+    "simple-node-logger": "^18.12.23",
+    "slackbots": "^1.2.0",
+    "winston": "^3.2.1",
+    "winston-daily-rotate-file": "^4.3.0"
+  }
+}
