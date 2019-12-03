@@ -62,7 +62,7 @@ const rael_messages = require('./helpers/rael_messages');
 const drinks = require('./helpers/rael_drinks');
 const greetings = require('./helpers/greetings');
 
-// initialize the bot.
+// initialise the bot.
 const bot = new SlackBot(slack_credentials);
 let params;
 
@@ -673,7 +673,8 @@ const handle_spotify_logout = () => {
 };
 
 /**
- *  initiates loubot and gives a random quote.
+ * [usage: '@raelbot initiate loubot']
+ * initiates loubot and gives a random quote.
  * @param data - the message received from the user.
  */
 const initiate_loubot = data => {
@@ -708,7 +709,7 @@ const provide_spendesk_update = data => {
     log.info(`[provide_spendesk_update] received request for a spendesk update...`);
 
     try {
-        latestTweets('spendesk', function (err, tweets) {
+        latestTweets('spendesk', (err, tweets) => {
             const response = tweets;
             let tweet;
             
