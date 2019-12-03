@@ -458,6 +458,28 @@ const show_spotify_track_status = async (data, basic) => {
     }
 };
 
+const handle_spotify_track_skip = async data => {
+    let request = data.text;
+    if (request.match(/next song/)) {
+        request = 'next';
+    } else if (request.match(/previous song/)) {
+        request = 'previous';
+    }
+
+    if (request === 'next' || request === 'previous') {
+        await axios.post(`https://api.spotify.com/v1/me/player/${request}`,
+        {},
+        {
+            headers: {
+                "Authorization": `Bearer ${spotify_credentials.access_token}`
+            }
+        });
+        setTimeout(() => {
+            show_spotify_track_status(data, true);
+        }, 2000);
+    }
+};
+
 /**
  * gets an individual playlist using a provided playlist id.
  * @param playlist_id - the playlist id.
@@ -547,7 +569,6 @@ const handle_spotify_playlist_add = async (data, playlist_id, confirm) => {
 
                 bot.postMessage(data.channel, `<@${data.user}> song has been added! :santa: :christmas_tree: :mother_christmas:`, params);
             } catch (error) {
-                console.log(error);
                 if (error.response) {
                     bot.postMessage(data.channel, `:face_with_head_bandage:\n\`${error}\``, params);
 
@@ -595,7 +616,6 @@ const toggle_spotify_shuffle = async data => {
 
         bot.postMessage(data.channel, `<@${data.user}> shuffle has been ${shuffle_status === true ? 'enabled' : 'disabled'}...`, params);
     } catch (error) {
-        console.log(error);
         if (error.response) {
             log.error(`[spotify] [toggle_spotify_shuffle] ${error.response.status} - ${error.response.statusText}`);
 
@@ -631,7 +651,6 @@ const adjust_spotify_volume = async data => {
 
         bot.postMessage(data.channel, `<@${data.user}> done...`, params);
     } catch (error) {
-        console.log(error);
         if (error.response) {
             log.error(`[spotify] [adjust_spotify_volume] ${error.response.status} - ${error.response.statusText}`);
 
